@@ -25,11 +25,22 @@ $uri = str_replace('/index.php', '', $uri);
 $uri = str_replace('/cliente-feliz-api', '', $uri);
 $uri = rtrim($uri, '/');
 
-// Detectar ruta de ofertalaboral específica
-if (($uri == '/ofertalaboral' || $uri == '/api/ofertalaboral') && $method == 'GET') {
+// Para debug
+error_log("URI recibida: " . $uri);
+error_log("Método: " . $method);
+
+// Detectar ruta de ofertalaboral específica 
+if ($uri == '/ofertalaboral' || $uri == '/api/ofertalaboral') {
     $controller = new OfertaLaboralController();
-    $controller->verVigentes();
-    return;
+
+    if ($method == 'GET') {
+        $controller->verVigentes();
+        return;
+    } elseif ($method == 'POST') {
+        error_log("Procesando POST a /ofertalaboral");
+        $controller->crearOferta();
+        return;
+    }
 }
 
 // Rutas de ofertas laborales (flexible)
@@ -39,10 +50,48 @@ if (
 ) {
     $controller = new OfertaLaboralController();
 
-    if ($uri == '/ofertas-laborales/vigentes' && $method == 'GET') {
+    // GET para obtener ofertas vigentes
+    if (($uri == '/ofertalaboral' || $uri == '/api/ofertalaboral' || $uri == '/ofertas-laborales/vigentes') && $method == 'GET') {
         $controller->verVigentes();
         return;
-    } elseif (preg_match('#^/ofertas-laborales/ubicacion/([^/]+)$#', $uri, $matches) && $method == 'GET') {
+    }
+    // POST para crear nueva oferta
+    elseif (($uri == '/ofertalaboral' || $uri == '/api/ofertalaboral' || $uri == '/ofertas') && $method == 'POST') {
+        $controller->crearOferta();
+        return;
+    }
+    // PUT para editar oferta (con ID en el cuerpo)
+    elseif (($uri == '/ofertalaboral' || $uri == '/api/ofertalaboral') && $method == 'PUT') {
+        // Obtener el ID del cuerpo de la solicitud
+        $data = json_decode(file_get_contents("php://input"), true);
+        if (isset($data['id'])) {
+            $controller->editarOferta($data['id']);
+            return;
+        } else {
+            Response::json([
+                'success' => false,
+                'message' => 'Se requiere el ID de la oferta en el cuerpo de la solicitud'
+            ], 400);
+            return;
+        }
+    }
+    // PATCH para actualización parcial (con ID en el cuerpo)
+    elseif (($uri == '/ofertalaboral' || $uri == '/api/ofertalaboral') && $method == 'PATCH') {
+        // Obtener el ID del cuerpo de la solicitud
+        $data = json_decode(file_get_contents("php://input"), true);
+        if (isset($data['id'])) {
+            $controller->actualizarParcial($data['id']);
+            return;
+        } else {
+            Response::json([
+                'success' => false,
+                'message' => 'Se requiere el ID de la oferta en el cuerpo de la solicitud'
+            ], 400);
+            return;
+        }
+    }
+    // Resto de las rutas existentes...
+    elseif (preg_match('#^/ofertas-laborales/ubicacion/([^/]+)$#', $uri, $matches) && $method == 'GET') {
         $controller->porUbicacion($matches[1]);
         return;
     } elseif (preg_match('#^/ofertas-laborales/contrato/([^/]+)$#', $uri, $matches) && $method == 'GET') {
@@ -51,15 +100,34 @@ if (
     } elseif (preg_match('#^/ofertas-laborales/([0-9]+)$#', $uri, $matches) && $method == 'GET') {
         $controller->detalle($matches[1]);
         return;
-    } elseif ($uri == '/ofertas' && $method == 'POST') {
-        $controller->crearOferta();
-        return;
     } elseif (preg_match('#^/ofertas/([0-9]+)$#', $uri, $matches) && $method == 'PUT') {
         $controller->editarOferta($matches[1]);
+        return;
+    } elseif (preg_match('#^/ofertas/([0-9]+)$#', $uri, $matches) && $method == 'PATCH') {
+        $controller->actualizarParcial($matches[1]);
         return;
     } elseif (preg_match('#^/ofertas/([0-9]+)/desactivar$#', $uri, $matches) && $method == 'PATCH') {
         $controller->desactivarOferta($matches[1]);
         return;
+    }
+    // AGREGAR SOPORTE PARA DELETE - eliminación de oferta
+    elseif (preg_match('#^/(?:api/)?(?:ofertas|ofertalabor(?:al)?)/([0-9]+)$#', $uri, $matches) && $method == 'DELETE') {
+        $controller->eliminarOferta($matches[1]);
+        return;
+    }
+    // AGREGAR SOPORTE PARA DELETE con ID en el cuerpo
+    elseif (($uri == '/ofertalaboral' || $uri == '/api/ofertalaboral' || $uri == '/ofertas' || $uri == '/api/ofertas') && $method == 'DELETE') {
+        $data = json_decode(file_get_contents("php://input"), true);
+        if (isset($data['id'])) {
+            $controller->eliminarOferta($data['id']);
+            return;
+        } else {
+            Response::json([
+                'success' => false,
+                'message' => 'Se requiere el ID de la oferta en el cuerpo de la solicitud'
+            ], 400);
+            return;
+        }
     }
 }
 
@@ -113,6 +181,57 @@ if (strpos($uri, '/postulacion') !== false || strpos($uri, '/postulaciones') !==
     elseif (($uri == '/postulaciones' || $uri == '/postulacion' || $uri == '/api/postulacion' || $uri == '/api/postulaciones') && $method == 'POST') {
         $controller->crearPostulacion();
         return;
+    }
+
+    // AÑADIR SOPORTE PARA PUT - actualización completa
+    elseif (($uri == '/postulaciones' || $uri == '/postulacion' || $uri == '/api/postulacion' || $uri == '/api/postulaciones') && $method == 'PUT') {
+        // Obtener el ID del cuerpo de la solicitud
+        $data = json_decode(file_get_contents("php://input"), true);
+        if (isset($data['id'])) {
+            $controller->actualizarPostulacion($data['id']);
+            return;
+        } else {
+            Response::json([
+                'success' => false,
+                'message' => 'Se requiere el ID de la postulación en el cuerpo de la solicitud'
+            ], 400);
+            return;
+        }
+    }
+
+    // AÑADIR SOPORTE PARA PATCH - actualización parcial
+    elseif (($uri == '/postulaciones' || $uri == '/postulacion' || $uri == '/api/postulacion' || $uri == '/api/postulaciones') && $method == 'PATCH') {
+        // Obtener el ID del cuerpo de la solicitud
+        $data = json_decode(file_get_contents("php://input"), true);
+        if (isset($data['id'])) {
+            $controller->actualizarParcial($data['id']);
+            return;
+        } else {
+            Response::json([
+                'success' => false,
+                'message' => 'Se requiere el ID de la postulación en el cuerpo de la solicitud'
+            ], 400);
+            return;
+        }
+    }
+    // AGREGAR SOPORTE PARA DELETE - eliminación de postulación
+    elseif (preg_match('#^/(?:api/)?(?:postulacion|postulaciones)/([0-9]+)$#', $uri, $matches) && $method == 'DELETE') {
+        $controller->eliminarPostulacion($matches[1]);
+        return;
+    }
+    // AGREGAR SOPORTE PARA DELETE con ID en el cuerpo
+    elseif (($uri == '/postulaciones' || $uri == '/postulacion' || $uri == '/api/postulacion' || $uri == '/api/postulaciones') && $method == 'DELETE') {
+        $data = json_decode(file_get_contents("php://input"), true);
+        if (isset($data['id'])) {
+            $controller->eliminarPostulacion($data['id']);
+            return;
+        } else {
+            Response::json([
+                'success' => false,
+                'message' => 'Se requiere el ID de la postulación en el cuerpo de la solicitud'
+            ], 400);
+            return;
+        }
     }
 }
 

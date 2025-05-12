@@ -1,67 +1,126 @@
 <?php
 require_once __DIR__ . '/../models/Usuario.php';
+require_once __DIR__ . '/../utils/Response.php';
+
+use Utils\Response;
 
 class UsuarioController
 {
+    private $model;
+    
+    public function __construct()
+    {
+        $this->model = new Usuario();
+    }
+
     public function crearUsuario()
     {
-        header('Content-Type: application/json');
-        $input = json_decode(file_get_contents('php://input'), true);
-
-        if (!isset($input['nombre'], $input['apellido'], $input['email'], $input['contraseña'], $input['rol'])) {
-            echo json_encode(['success' => false, 'message' => 'Faltan campos requeridos']);
-            return;
-        }
-
         try {
-            $usuario = new Usuario();
-            $result = $usuario->crear($input);
-            echo json_encode(['success' => $result]);
-        } catch (Exception $e) {
-            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+            // Obtener datos del cuerpo de la solicitud
+            $rawData = file_get_contents("php://input");
+            error_log("Datos recibidos para crear usuario: " . $rawData);
+
+            $data = json_decode($rawData, true);
+
+            // Validar que se recibió un JSON válido
+            if ($data === null && json_last_error() !== JSON_ERROR_NONE) {
+                Response::json([
+                    'success' => false,
+                    'message' => 'Error en formato JSON: ' . json_last_error_msg(),
+                    'raw_data' => $rawData
+                ], 400);
+                return;
+            }
+
+            // Definir y validar campos requeridos con mensajes detallados
+            $camposRequeridos = ['nombre', 'apellido', 'email', 'contraseña', 'rol'];
+            $camposFaltantes = [];
+            
+            foreach ($camposRequeridos as $campo) {
+                if (empty($data[$campo])) {
+                    $camposFaltantes[] = $campo;
+                }
+            }
+            
+            if (!empty($camposFaltantes)) {
+                Response::json([
+                    'success' => false,
+                    'message' => 'Faltan campos requeridos',
+                    'missing_fields' => $camposFaltantes,
+                    'required_fields' => $camposRequeridos,
+                    'received_data' => $data
+                ], 400);
+                return;
+            }
+
+            // Validar que el rol sea válido
+            $rolesValidos = ['Reclutador', 'Candidato'];
+            if (!in_array($data['rol'], $rolesValidos)) {
+                Response::json([
+                    'success' => false,
+                    'message' => 'Rol no válido. Debe ser "Reclutador" o "Candidato"',
+                    'valid_roles' => $rolesValidos
+                ], 400);
+                return;
+            }
+
+            // Validar que el email no esté ya registrado
+            if ($this->model->emailExiste($data['email'])) {
+                Response::json([
+                    'success' => false,
+                    'message' => 'El email ya está registrado'
+                ], 400);
+                return;
+            }
+
+            // Crear usuario en la base de datos
+            $resultado = $this->model->crear($data);
+
+            if ($resultado) {
+                Response::json([
+                    'success' => true,
+                    'message' => 'Usuario creado exitosamente',
+                    'id' => $resultado
+                ], 201);
+            } else {
+                Response::json([
+                    'success' => false,
+                    'message' => 'Error al crear usuario'
+                ], 500);
+            }
+        } catch (PDOException $e) {
+            Response::json([
+                'success' => false,
+                'message' => 'Error al crear usuario: ' . $e->getMessage()
+            ], 500);
         }
     }
 
     public function getUsuarios()
     {
         try {
-            $db = new Database();
-            $conn = $db->getConnection();
-
-            $query = "SELECT id, nombre, email, rol FROM usuarios";
-            $stmt = $conn->prepare($query);
-            $stmt->execute();
-
-            if ($stmt->rowCount() > 0) {
-                $usuarios = [];
-                while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                    // Eliminar datos sensibles como contraseñas
-                    $usuarios[] = [
-                        'id' => $row['id'],
-                        'nombre' => $row['nombre'],
-                        'email' => $row['email'],
-                        'rol' => $row['rol']
-                    ];
-                }
-
-                echo json_encode([
+            $usuarios = $this->model->getAll();
+            
+            if (!empty($usuarios)) {
+                Response::json([
                     'success' => true,
                     'usuarios' => $usuarios
                 ]);
             } else {
-                echo json_encode([
+                Response::json([
                     'success' => true,
                     'message' => 'No hay usuarios registrados',
                     'usuarios' => []
                 ]);
             }
         } catch (PDOException $e) {
-            echo json_encode([
+            Response::json([
                 'success' => false,
                 'message' => 'Error al obtener usuarios: ' . $e->getMessage()
-            ]);
+            ], 500);
         }
     }
-}
 
+
+}
 ?>

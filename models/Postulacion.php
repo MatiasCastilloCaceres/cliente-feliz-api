@@ -78,20 +78,45 @@ class Postulacion
         return $postulaciones;
     }
 
+    // Obtener postulación por ID
+    public function getById($id)
+    {
+        $query = "SELECT p.*, u.nombre as nombre_candidato, o.titulo as titulo_oferta
+                 FROM Postulacion p
+                 JOIN Usuario u ON p.candidato_id = u.id
+                 JOIN OfertaLaboral o ON p.oferta_laboral_id = o.id
+                 WHERE p.id = :id";
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+        $stmt->execute();
+        
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    }
+
     // Crear una nueva postulación
     public function crear($data)
     {
         $query = "INSERT INTO Postulacion 
-                 (candidato_id, oferta_laboral_id, comentario, fecha_postulacion, estado) 
+                 (candidato_id, oferta_laboral_id, comentario, estado_postulacion) 
                  VALUES 
-                 (:candidato_id, :oferta_laboral_id, :comentario, CURRENT_TIMESTAMP, 'Pendiente')";
+                 (:candidato_id, :oferta_laboral_id, :comentario, :estado_postulacion)";
 
+        // Valores predeterminados y manejo de datos opcionales
         $comentario = isset($data['comentario']) ? $data['comentario'] : '';
+        $estadoPostulacion = isset($data['estado_postulacion']) ? $data['estado_postulacion'] : 'Postulando';
+
+        // Validar que el estado_postulacion esté entre los valores permitidos
+        $estadosValidos = ['Postulando', 'Revisando', 'Entrevista Psicológica', 'Entrevista Personal', 'Seleccionado', 'Descartado'];
+        if (!in_array($estadoPostulacion, $estadosValidos)) {
+            $estadoPostulacion = 'Postulando'; // Valor por defecto si no es válido
+        }
 
         $stmt = $this->conn->prepare($query);
         $stmt->bindParam(':candidato_id', $data['candidato_id'], PDO::PARAM_INT);
         $stmt->bindParam(':oferta_laboral_id', $data['oferta_laboral_id'], PDO::PARAM_INT);
         $stmt->bindParam(':comentario', $comentario, PDO::PARAM_STR);
+        $stmt->bindParam(':estado_postulacion', $estadoPostulacion, PDO::PARAM_STR);
 
         if ($stmt->execute()) {
             return $this->conn->lastInsertId();
@@ -103,7 +128,13 @@ class Postulacion
     // Actualizar estado de postulación
     public function actualizarEstado($id, $estado)
     {
-        $query = "UPDATE Postulacion SET estado = :estado WHERE id = :id";
+        // Validar que el estado esté entre los valores permitidos
+        $estadosValidos = ['Postulando', 'Revisando', 'Entrevista Psicológica', 'Entrevista Personal', 'Seleccionado', 'Descartado'];
+        if (!in_array($estado, $estadosValidos)) {
+            return false;
+        }
+
+        $query = "UPDATE Postulacion SET estado_postulacion = :estado WHERE id = :id";
 
         $stmt = $this->conn->prepare($query);
         $stmt->bindParam(':estado', $estado, PDO::PARAM_STR);
@@ -122,6 +153,99 @@ class Postulacion
         $stmt->bindParam(':id', $id, PDO::PARAM_INT);
 
         return $stmt->execute();
+    }
+
+    // Actualización completa
+    public function actualizar($id, $data)
+    {
+        // Verificar que los campos requeridos estén presentes
+        if (!isset($data['candidato_id']) || !isset($data['oferta_laboral_id'])) {
+            return false;
+        }
+        
+        $query = "UPDATE Postulacion SET 
+                  candidato_id = :candidato_id,
+                  oferta_laboral_id = :oferta_laboral_id,
+                  comentario = :comentario,
+                  estado_postulacion = :estado_postulacion
+                  WHERE id = :id";
+        
+        // Valores predeterminados y opcionales
+        $comentario = isset($data['comentario']) ? $data['comentario'] : '';
+        $estadoPostulacion = isset($data['estado_postulacion']) ? $data['estado_postulacion'] : 'Postulando';
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':candidato_id', $data['candidato_id'], PDO::PARAM_INT);
+        $stmt->bindParam(':oferta_laboral_id', $data['oferta_laboral_id'], PDO::PARAM_INT);
+        $stmt->bindParam(':comentario', $comentario, PDO::PARAM_STR);
+        $stmt->bindParam(':estado_postulacion', $estadoPostulacion, PDO::PARAM_STR);
+        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+        
+        return $stmt->execute();
+    }
+
+    // Actualización parcial
+    public function actualizarParcial($id, $data)
+    {
+        // Construir la consulta SQL de forma dinámica
+        $sql = "UPDATE Postulacion SET ";
+        $params = [];
+        
+        // Campos permitidos para actualización
+        $camposPermitidos = [
+            'candidato_id', 'oferta_laboral_id', 'comentario', 'estado_postulacion'
+        ];
+        
+        // Agregar cada campo a la consulta si está presente en los datos
+        $actualizaciones = [];
+        foreach ($camposPermitidos as $campo) {
+            if (isset($data[$campo])) {
+                $actualizaciones[] = "$campo = :$campo";
+                $params[":$campo"] = $data[$campo];
+            }
+        }
+        
+        // Si no hay campos para actualizar, retornar falso
+        if (empty($actualizaciones)) {
+            return false;
+        }
+        
+        // Completar la consulta
+        $sql .= implode(", ", $actualizaciones);
+        $sql .= " WHERE id = :id";
+        $params[':id'] = $id;
+        
+        // Ejecutar la consulta
+        $stmt = $this->conn->prepare($sql);
+        
+        return $stmt->execute($params);
+    }
+
+    /**
+     * Eliminar una postulación
+     */
+    public function eliminar($id)
+    {
+        $query = "DELETE FROM Postulacion WHERE id = :id";
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+        
+        return $stmt->execute();
+    }
+
+    /**
+     * Contar postulaciones por oferta
+     */
+    public function contarPorOferta($ofertaId)
+    {
+        $query = "SELECT COUNT(*) FROM Postulacion WHERE oferta_laboral_id = :ofertaId";
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':ofertaId', $ofertaId, PDO::PARAM_INT);
+        $stmt->execute();
+        
+        return (int)$stmt->fetchColumn();
     }
 }
 ?>

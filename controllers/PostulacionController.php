@@ -103,15 +103,17 @@ class PostulacionController
         try {
             $data = json_decode(file_get_contents("php://input"), true);
 
-            if (!isset($data['estado'])) {
+            // Cambiar la verificación para usar estado_postulacion en lugar de estado
+            if (!isset($data['estado_postulacion'])) {
                 Response::json([
                     'success' => false,
-                    'message' => 'Se requiere el nuevo estado'
+                    'message' => 'Se requiere el nuevo estado de postulación',
+                    'valid_states' => ['Postulando', 'Revisando', 'Entrevista Psicológica', 'Entrevista Personal', 'Seleccionado', 'Descartado']
                 ], 400);
                 return;
             }
 
-            $resultado = $this->model->actualizarEstado($id, $data['estado']);
+            $resultado = $this->model->actualizarEstado($id, $data['estado_postulacion']);
 
             if ($resultado) {
                 Response::json([
@@ -121,7 +123,7 @@ class PostulacionController
             } else {
                 Response::json([
                     'success' => false,
-                    'message' => 'Error al actualizar estado de postulación'
+                    'message' => 'Error al actualizar estado de postulación o estado no válido'
                 ], 500);
             }
         } catch (PDOException $e) {
@@ -162,6 +164,210 @@ class PostulacionController
             Response::json([
                 'success' => false,
                 'message' => 'Error al agregar comentario a la postulación: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function actualizarPostulacion($id)
+    {
+        try {
+            // Verificar si la postulación existe
+            $postulacion = $this->model->getById($id);
+            if (!$postulacion) {
+                Response::json([
+                    'success' => false,
+                    'message' => 'Postulación no encontrada'
+                ], 404);
+                return;
+            }
+
+            // Obtener datos del cuerpo de la solicitud
+            $rawData = file_get_contents("php://input");
+            error_log("Datos recibidos para actualizar postulación ID $id: " . $rawData);
+            
+            $data = json_decode($rawData, true);
+
+            // Validar que se recibió un JSON válido
+            if ($data === null && json_last_error() !== JSON_ERROR_NONE) {
+                Response::json([
+                    'success' => false,
+                    'message' => 'Error en formato JSON: ' . json_last_error_msg(),
+                    'raw_data' => $rawData
+                ], 400);
+                return;
+            }
+
+            // Eliminar el id del conjunto de datos a actualizar (si existe)
+            if (isset($data['id'])) {
+                unset($data['id']);
+            }
+            
+            // No permitir la actualización de ciertos campos a través de la API
+            // por ejemplo, nombre_candidato que mencionas en tu solicitud
+            if (isset($data['nombre_candidato'])) {
+                Response::json([
+                    'success' => false,
+                    'message' => 'No se puede actualizar el nombre del candidato directamente. Este campo se actualiza automáticamente al cambiar el candidato_id.'
+                ], 400);
+                return;
+            }
+
+            // Validar el estado_postulacion si se está actualizando
+            if (isset($data['estado_postulacion'])) {
+                $estadosValidos = ['Postulando', 'Revisando', 'Entrevista Psicológica', 'Entrevista Personal', 'Seleccionado', 'Descartado'];
+                if (!in_array($data['estado_postulacion'], $estadosValidos)) {
+                    Response::json([
+                        'success' => false,
+                        'message' => 'Estado de postulación no válido',
+                        'valid_states' => $estadosValidos
+                    ], 400);
+                    return;
+                }
+            }
+
+            // Actualizar la postulación
+            $resultado = $this->model->actualizar($id, $data);
+
+            if ($resultado) {
+                Response::json([
+                    'success' => true,
+                    'message' => 'Postulación actualizada exitosamente'
+                ]);
+            } else {
+                Response::json([
+                    'success' => false,
+                    'message' => 'Error al actualizar postulación'
+                ], 500);
+            }
+        } catch (PDOException $e) {
+            Response::json([
+                'success' => false,
+                'message' => 'Error al actualizar postulación: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function actualizarParcial($id)
+    {
+        try {
+            // Verificar si la postulación existe
+            $postulacion = $this->model->getById($id);
+            if (!$postulacion) {
+                Response::json([
+                    'success' => false,
+                    'message' => 'Postulación no encontrada'
+                ], 404);
+                return;
+            }
+
+            // Obtener datos del cuerpo de la solicitud
+            $rawData = file_get_contents("php://input");
+            error_log("Datos recibidos para actualización parcial ID $id: " . $rawData);
+            
+            $data = json_decode($rawData, true);
+
+            // Validar que se recibió un JSON válido
+            if ($data === null && json_last_error() !== JSON_ERROR_NONE) {
+                Response::json([
+                    'success' => false,
+                    'message' => 'Error en formato JSON: ' . json_last_error_msg(),
+                    'raw_data' => $rawData
+                ], 400);
+                return;
+            }
+
+            // Validar que hay datos para actualizar
+            if (empty($data) || count($data) <= 1) { // Ignorar el campo 'id' que ya usamos
+                Response::json([
+                    'success' => false,
+                    'message' => 'No se proporcionaron datos para actualizar'
+                ], 400);
+                return;
+            }
+
+            // Eliminar el id del conjunto de datos a actualizar (si existe)
+            if (isset($data['id'])) {
+                unset($data['id']);
+            }
+            
+            // No permitir la actualización de ciertos campos a través de la API
+            if (isset($data['nombre_candidato'])) {
+                Response::json([
+                    'success' => false,
+                    'message' => 'No se puede actualizar el nombre del candidato directamente'
+                ], 400);
+                return;
+            }
+
+            // Validar el estado_postulacion si se está actualizando
+            if (isset($data['estado_postulacion'])) {
+                $estadosValidos = ['Postulando', 'Revisando', 'Entrevista Psicológica', 'Entrevista Personal', 'Seleccionado', 'Descartado'];
+                if (!in_array($data['estado_postulacion'], $estadosValidos)) {
+                    Response::json([
+                        'success' => false,
+                        'message' => 'Estado de postulación no válido',
+                        'valid_states' => $estadosValidos
+                    ], 400);
+                    return;
+                }
+            }
+
+            // Actualizar la postulación
+            $resultado = $this->model->actualizarParcial($id, $data);
+
+            if ($resultado) {
+                Response::json([
+                    'success' => true,
+                    'message' => 'Postulación actualizada parcialmente con éxito'
+                ]);
+            } else {
+                Response::json([
+                    'success' => false,
+                    'message' => 'No se realizaron cambios en la postulación'
+                ], 500);
+            }
+        } catch (PDOException $e) {
+            Response::json([
+                'success' => false,
+                'message' => 'Error al actualizar parcialmente postulación: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Eliminar una postulación
+     */
+    public function eliminarPostulacion($id)
+    {
+        try {
+            // Verificar si la postulación existe
+            $postulacion = $this->model->getById($id);
+            if (!$postulacion) {
+                Response::json([
+                    'success' => false,
+                    'message' => 'Postulación no encontrada'
+                ], 404);
+                return;
+            }
+
+            // Eliminar la postulación
+            $resultado = $this->model->eliminar($id);
+
+            if ($resultado) {
+                Response::json([
+                    'success' => true,
+                    'message' => 'Postulación eliminada exitosamente'
+                ]);
+            } else {
+                Response::json([
+                    'success' => false,
+                    'message' => 'Error al eliminar postulación'
+                ], 500);
+            }
+        } catch (PDOException $e) {
+            Response::json([
+                'success' => false,
+                'message' => 'Error al eliminar postulación: ' . $e->getMessage()
             ], 500);
         }
     }

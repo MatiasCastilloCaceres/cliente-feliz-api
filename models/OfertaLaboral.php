@@ -92,24 +92,25 @@ class OfertaLaboral
     // Crear nueva oferta laboral
     public function crear($data)
     {
-        $query = "INSERT INTO OfertaLaboral 
-                 (titulo, descripcion, ubicacion, salario, tipo_contrato, fecha_publicacion, fecha_cierre, estado, reclutador_id) 
-                 VALUES 
-                 (:titulo, :descripcion, :ubicacion, :salario, :tipo_contrato, CURRENT_DATE, :fecha_cierre, :estado, :reclutador_id)";
+        $query = "INSERT INTO OfertaLaboral (titulo, descripcion, ubicacion, salario, tipo_contrato, 
+                  reclutador_id, fecha_publicacion, fecha_cierre, estado) 
+                  VALUES (:titulo, :descripcion, :ubicacion, :salario, :tipo_contrato, 
+                  :reclutador_id, CURRENT_TIMESTAMP, :fecha_cierre, 'Activa')";
 
-        // Valores por defecto si no se proporcionan
-        $estado = isset($data['estado']) ? $data['estado'] : 'Vigente';
-        $tipo_contrato = isset($data['tipo_contrato']) ? $data['tipo_contrato'] : 'Indefinido';
+        // Valores predeterminados para campos opcionales
+        $ubicacion = isset($data['ubicacion']) ? $data['ubicacion'] : '';
+        $salario = isset($data['salario']) ? $data['salario'] : '';
+        $tipoContrato = isset($data['tipo_contrato']) ? $data['tipo_contrato'] : '';
+        $fechaCierre = isset($data['fecha_cierre']) ? $data['fecha_cierre'] : null;
 
         $stmt = $this->conn->prepare($query);
         $stmt->bindParam(':titulo', $data['titulo'], PDO::PARAM_STR);
         $stmt->bindParam(':descripcion', $data['descripcion'], PDO::PARAM_STR);
-        $stmt->bindParam(':ubicacion', $data['ubicacion'], PDO::PARAM_STR);
-        $stmt->bindParam(':salario', $data['salario'], PDO::PARAM_STR);
-        $stmt->bindParam(':tipo_contrato', $tipo_contrato, PDO::PARAM_STR);
-        $stmt->bindParam(':fecha_cierre', $data['fecha_cierre'], PDO::PARAM_STR);
-        $stmt->bindParam(':estado', $estado, PDO::PARAM_STR);
+        $stmt->bindParam(':ubicacion', $ubicacion, PDO::PARAM_STR);
+        $stmt->bindParam(':salario', $salario, PDO::PARAM_STR);
+        $stmt->bindParam(':tipo_contrato', $tipoContrato, PDO::PARAM_STR);
         $stmt->bindParam(':reclutador_id', $data['reclutador_id'], PDO::PARAM_INT);
+        $stmt->bindParam(':fecha_cierre', $fechaCierre, PDO::PARAM_STR);
 
         if ($stmt->execute()) {
             return $this->conn->lastInsertId();
@@ -175,6 +176,49 @@ class OfertaLaboral
         $stmt->bindParam(':id', $id, PDO::PARAM_INT);
 
         return $stmt->execute();
+    }
+
+    // Añadir este nuevo método
+    public function actualizarParcial($id, $data)
+    {
+        // Construir la consulta SQL de forma dinámica
+        $sql = "UPDATE OfertaLaboral SET ";
+        $params = [];
+
+        // Campos permitidos para actualización
+        $camposPermitidos = [
+            'titulo',
+            'descripcion',
+            'ubicacion',
+            'salario',
+            'tipo_contrato',
+            'fecha_cierre',
+            'estado'
+        ];
+
+        // Agregar cada campo a la consulta si está presente en los datos
+        $actualizaciones = [];
+        foreach ($camposPermitidos as $campo) {
+            if (isset($data[$campo])) {
+                $actualizaciones[] = "$campo = :$campo";
+                $params[":$campo"] = $data[$campo];
+            }
+        }
+
+        // Si no hay campos para actualizar, retornar falso
+        if (empty($actualizaciones)) {
+            return false;
+        }
+
+        // Completar la consulta
+        $sql .= implode(", ", $actualizaciones);
+        $sql .= " WHERE id = :id";
+        $params[':id'] = $id;
+
+        // Ejecutar la consulta
+        $stmt = $this->conn->prepare($sql);
+
+        return $stmt->execute($params);
     }
 }
 ?>
