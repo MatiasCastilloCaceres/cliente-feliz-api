@@ -11,6 +11,7 @@ class Pedido {
 
     public function __construct($db) {
         $this->conn = $db;
+        $this->db = new PDO("mysql:host=localhost;dbname=consultoria", "root", "");
     }
 
     public function create() {

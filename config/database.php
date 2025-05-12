@@ -2,7 +2,7 @@
 class Database
 {
     private $host = "localhost";
-    private $db_name = "consultoria"; // Aquí debe estar "consultoria" en lugar de "cliente_feliz"
+    private $db_name = "consultoria"; // Asegúrate que sea "consultoria"
     private $username = "root";
     private $password = "";
     private $conn;

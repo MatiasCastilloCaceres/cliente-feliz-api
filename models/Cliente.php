@@ -1,5 +1,6 @@
 <?php
-class Cliente {
+class Cliente
+{
     private $conn;
     private $table_name = "clientes";
 
@@ -8,11 +9,14 @@ class Cliente {
     public $email;
     public $telefono;
 
-    public function __construct($db) {
+    public function __construct($db)
+    {
         $this->conn = $db;
+        $this->db = new PDO("mysql:host=localhost;dbname=consultoria", "root", "");
     }
 
-    public function create() {
+    public function create()
+    {
         $query = "INSERT INTO " . $this->table_name . " (nombre, email, telefono) VALUES (:nombre, :email, :telefono)";
         $stmt = $this->conn->prepare($query);
 
@@ -26,14 +30,16 @@ class Cliente {
         return false;
     }
 
-    public function read() {
+    public function read()
+    {
         $query = "SELECT * FROM " . $this->table_name;
         $stmt = $this->conn->prepare($query);
         $stmt->execute();
         return $stmt;
     }
 
-    public function update() {
+    public function update()
+    {
         $query = "UPDATE " . $this->table_name . " SET nombre = :nombre, email = :email, telefono = :telefono WHERE id = :id";
         $stmt = $this->conn->prepare($query);
 
@@ -48,7 +54,8 @@ class Cliente {
         return false;
     }
 
-    public function delete() {
+    public function delete()
+    {
         $query = "DELETE FROM " . $this->table_name . " WHERE id = :id";
         $stmt = $this->conn->prepare($query);
         $stmt->bindParam(':id', $this->id);
