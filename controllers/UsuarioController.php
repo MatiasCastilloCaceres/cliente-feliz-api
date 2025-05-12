@@ -4,6 +4,14 @@ require_once __DIR__ . '/../utils/Response.php';
 
 use Utils\Response;
 
+// Función simple de respuesta JSON (sin usar la clase Response)
+function sendJsonResponse($data, $statusCode = 200) {
+    http_response_code($statusCode);
+    header('Content-Type: application/json');
+    echo json_encode($data);
+    exit;
+}
+
 class UsuarioController
 {
     private $model;
@@ -121,6 +129,240 @@ class UsuarioController
         }
     }
 
+    // Método para obtener un usuario específico
+    public function getUsuario($id)
+    {
+        try {
+            $usuario = $this->model->getById($id);
+            
+            if ($usuario) {
+                sendJsonResponse([
+                    'success' => true,
+                    'usuario' => $usuario
+                ]);
+            } else {
+                sendJsonResponse([
+                    'success' => false,
+                    'message' => 'Usuario no encontrado'
+                ], 404);
+            }
+        } catch (PDOException $e) {
+            sendJsonResponse([
+                'success' => false,
+                'message' => 'Error al obtener usuario: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 
+    // Método para actualizar un usuario completo (PUT)
+    public function actualizarUsuario($id)
+    {
+        try {
+            // Verificar si el usuario existe
+            $usuario = $this->model->getById($id);
+            if (!$usuario) {
+                sendJsonResponse([
+                    'success' => false,
+                    'message' => 'Usuario no encontrado'
+                ], 404);
+                return;
+            }
+
+            // Obtener datos del cuerpo de la solicitud
+            $rawData = file_get_contents("php://input");
+            error_log("Datos recibidos para actualizar usuario ID $id: " . $rawData);
+            
+            $data = json_decode($rawData, true);
+
+            // Validar que se recibió un JSON válido
+            if ($data === null && json_last_error() !== JSON_ERROR_NONE) {
+                sendJsonResponse([
+                    'success' => false,
+                    'message' => 'Error en formato JSON: ' . json_last_error_msg(),
+                    'raw_data' => $rawData
+                ], 400);
+                return;
+            }
+
+            // Validar campos requeridos
+            $camposRequeridos = ['nombre', 'apellido', 'email', 'rol'];
+            $camposFaltantes = [];
+            
+            foreach ($camposRequeridos as $campo) {
+                if (empty($data[$campo])) {
+                    $camposFaltantes[] = $campo;
+                }
+            }
+            
+            if (!empty($camposFaltantes)) {
+                sendJsonResponse([
+                    'success' => false,
+                    'message' => 'Faltan campos requeridos',
+                    'missing_fields' => $camposFaltantes,
+                    'required_fields' => $camposRequeridos
+                ], 400);
+                return;
+            }
+
+            // Validar que el rol sea válido
+            $rolesValidos = ['administrador', 'reclutador', 'candidato']; // Ajusta según tus roles válidos
+            if (!in_array(strtolower($data['rol']), array_map('strtolower', $rolesValidos))) {
+                sendJsonResponse([
+                    'success' => false,
+                    'message' => 'Rol no válido',
+                    'valid_roles' => $rolesValidos
+                ], 400);
+                return;
+            }
+
+            // Validar que el email no esté ya registrado por otro usuario
+            if ($data['email'] !== $usuario['email'] && $this->model->emailExiste($data['email'])) {
+                sendJsonResponse([
+                    'success' => false,
+                    'message' => 'El email ya está registrado por otro usuario'
+                ], 400);
+                return;
+            }
+
+            // Actualizar usuario
+            $resultado = $this->model->actualizar($id, $data);
+
+            if ($resultado) {
+                sendJsonResponse([
+                    'success' => true,
+                    'message' => 'Usuario actualizado exitosamente'
+                ]);
+            } else {
+                sendJsonResponse([
+                    'success' => false,
+                    'message' => 'No se realizaron cambios en el usuario'
+                ], 500);
+            }
+        } catch (PDOException $e) {
+            sendJsonResponse([
+                'success' => false,
+                'message' => 'Error al actualizar usuario: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // Método para actualizar parcialmente un usuario (PATCH)
+    public function actualizarParcial($id)
+    {
+        try {
+            // Verificar si el usuario existe
+            $usuario = $this->model->getById($id);
+            if (!$usuario) {
+                sendJsonResponse([
+                    'success' => false,
+                    'message' => 'Usuario no encontrado'
+                ], 404);
+                return;
+            }
+
+            // Obtener datos del cuerpo de la solicitud
+            $rawData = file_get_contents("php://input");
+            error_log("Datos recibidos para actualización parcial de usuario ID $id: " . $rawData);
+            
+            $data = json_decode($rawData, true);
+
+            // Validar que se recibió un JSON válido
+            if ($data === null && json_last_error() !== JSON_ERROR_NONE) {
+                sendJsonResponse([
+                    'success' => false,
+                    'message' => 'Error en formato JSON: ' . json_last_error_msg(),
+                    'raw_data' => $rawData
+                ], 400);
+                return;
+            }
+
+            // Validar que hay datos para actualizar
+            if (empty($data) || count($data) <= 1) { // Ignorar el campo 'id' que ya usamos
+                sendJsonResponse([
+                    'success' => false,
+                    'message' => 'No se proporcionaron datos para actualizar'
+                ], 400);
+                return;
+            }
+
+            // Validar que el rol sea válido si se está actualizando
+            if (isset($data['rol'])) {
+                $rolesValidos = ['administrador', 'reclutador', 'candidato']; // Ajusta según tus roles válidos
+                if (!in_array(strtolower($data['rol']), array_map('strtolower', $rolesValidos))) {
+                    sendJsonResponse([
+                        'success' => false,
+                        'message' => 'Rol no válido',
+                        'valid_roles' => $rolesValidos
+                    ], 400);
+                    return;
+                }
+            }
+
+            // Validar que el email no esté ya registrado por otro usuario si se está actualizando
+            if (isset($data['email']) && $data['email'] !== $usuario['email'] && $this->model->emailExiste($data['email'])) {
+                sendJsonResponse([
+                    'success' => false,
+                    'message' => 'El email ya está registrado por otro usuario'
+                ], 400);
+                return;
+            }
+
+            // Actualizar usuario
+            $resultado = $this->model->actualizar($id, $data);
+
+            if ($resultado) {
+                sendJsonResponse([
+                    'success' => true,
+                    'message' => 'Usuario actualizado parcialmente con éxito'
+                ]);
+            } else {
+                sendJsonResponse([
+                    'success' => false,
+                    'message' => 'No se realizaron cambios en el usuario'
+                ], 500);
+            }
+        } catch (PDOException $e) {
+            sendJsonResponse([
+                'success' => false,
+                'message' => 'Error al actualizar usuario: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // Método para eliminar un usuario
+    public function eliminarUsuario($id)
+    {
+        try {
+            // Verificar si el usuario existe
+            $usuario = $this->model->getById($id);
+            if (!$usuario) {
+                sendJsonResponse([
+                    'success' => false,
+                    'message' => 'Usuario no encontrado'
+                ], 404);
+                return;
+            }
+
+            // Eliminar usuario
+            $resultado = $this->model->eliminar($id);
+
+            if ($resultado) {
+                sendJsonResponse([
+                    'success' => true,
+                    'message' => 'Usuario eliminado exitosamente'
+                ]);
+            } else {
+                sendJsonResponse([
+                    'success' => false,
+                    'message' => 'Error al eliminar usuario'
+                ], 500);
+            }
+        } catch (PDOException $e) {
+            sendJsonResponse([
+                'success' => false,
+                'message' => 'Error al eliminar usuario: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }
 ?>

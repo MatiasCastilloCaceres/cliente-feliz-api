@@ -10,6 +10,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
+// Importar la clase Response
+require_once 'utils/Response.php';
+use Utils\Response;
+
+// Definir función simple para respuestas JSON (evita usar la clase Response)
+function respondWithJson($data, $statusCode = 200) {
+    http_response_code($statusCode);
+    header('Content-Type: application/json');
+    echo json_encode($data);
+    exit;
+}
+
 // Configuración inicial
 require_once 'config/database.php';
 require_once 'controllers/OfertaLaboralController.php';
@@ -134,11 +146,81 @@ if (
 // Rutas de usuarios
 if ($uri == '/usuario' || $uri == '/api/usuario') {
     $controller = new UsuarioController();
+    
     if ($method == 'GET') {
         $controller->getUsuarios();
         return;
-    } elseif ($method == 'POST') {
+    } 
+    elseif ($method == 'POST') {
         $controller->crearUsuario();
+        return;
+    }
+    // AGREGAR SOPORTE PARA PUT - actualización completa con ID en el cuerpo
+    elseif ($method == 'PUT') {
+        // Obtener el ID del cuerpo de la solicitud
+        $data = json_decode(file_get_contents("php://input"), true);
+        if (isset($data['id'])) {
+            $controller->actualizarUsuario($data['id']);
+            return;
+        } else {
+            respondWithJson([
+                'success' => false,
+                'message' => 'Se requiere el ID del usuario en el cuerpo de la solicitud'
+            ], 400);
+            return;
+        }
+    }
+    // AGREGAR SOPORTE PARA PATCH - actualización parcial con ID en el cuerpo
+    elseif ($method == 'PATCH') {
+        // Obtener el ID del cuerpo de la solicitud
+        $data = json_decode(file_get_contents("php://input"), true);
+        if (isset($data['id'])) {
+            $controller->actualizarParcial($data['id']);
+            return;
+        } else {
+            respondWithJson([
+                'success' => false,
+                'message' => 'Se requiere el ID del usuario en el cuerpo de la solicitud'
+            ], 400);
+            return;
+        }
+    }
+    // AGREGAR SOPORTE PARA DELETE - eliminar usuario
+    elseif ($method == 'DELETE') {
+        // Obtener el ID del cuerpo de la solicitud
+        $data = json_decode(file_get_contents("php://input"), true);
+        if (isset($data['id'])) {
+            $controller->eliminarUsuario($data['id']);
+            return;
+        } else {
+            respondWithJson([
+                'success' => false,
+                'message' => 'Se requiere el ID del usuario en el cuerpo de la solicitud'
+            ], 400);
+            return;
+        }
+    }
+}
+
+// También agregar soporte para rutas con ID en la URL
+if (preg_match('#^/(?:api/)?usuario/([0-9]+)$#', $uri, $matches)) {
+    $controller = new UsuarioController();
+    $id = $matches[1];
+    
+    if ($method == 'GET') {
+        $controller->getUsuario($id);
+        return;
+    } 
+    elseif ($method == 'PUT') {
+        $controller->actualizarUsuario($id);
+        return;
+    } 
+    elseif ($method == 'PATCH') {
+        $controller->actualizarParcial($id);
+        return;
+    } 
+    elseif ($method == 'DELETE') {
+        $controller->eliminarUsuario($id);
         return;
     }
 }
@@ -236,8 +318,7 @@ if (strpos($uri, '/postulacion') !== false || strpos($uri, '/postulaciones') !==
 }
 
 // Si ninguna ruta coincide
-header('Content-Type: application/json');
-echo json_encode([
+respondWithJson([
     'success' => false,
     'message' => 'Ruta no encontrada',
     'debug' => [
@@ -247,5 +328,4 @@ echo json_encode([
         'post_data' => $_POST,
         'raw_input' => json_decode(file_get_contents("php://input"), true)
     ]
-]);
-exit;
+], 404);
