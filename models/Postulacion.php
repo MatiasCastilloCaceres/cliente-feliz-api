@@ -32,39 +32,15 @@ class Postulacion
         return $postulaciones;
     }
 
-    // Obtener postulación por ID
-    public function getById($id)
-    {
-        $query = "SELECT p.*, o.titulo as titulo_oferta, u.nombre as nombre_candidato 
-                 FROM Postulacion p
-                 JOIN OfertaLaboral o ON p.oferta_laboral_id = o.id
-                 JOIN Usuario u ON p.candidato_id = u.id
-                 WHERE p.id = :id";
-
-        $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
-        $stmt->execute();
-
-        return $stmt->fetch(PDO::FETCH_ASSOC);
-    }
-
     // Obtener postulaciones por candidato
-    public function getPorCandidato($candidatoId)
+    public function getByCandidato($candidatoId)
     {
-        // Primero verificamos si el candidato existe
-        $queryUsuario = "SELECT * FROM Usuario WHERE id = :candidato_id";
-        $stmtUsuario = $this->conn->prepare($queryUsuario);
-        $stmtUsuario->bindParam(':candidato_id', $candidatoId, PDO::PARAM_INT);
-        $stmtUsuario->execute();
-
-        if ($stmtUsuario->rowCount() == 0) {
-            throw new Exception('El candidato con ID ' . $candidatoId . ' no existe');
-        }
-
-        // Consulta detallada con JOIN para obtener más información sobre las postulaciones
-        $query = "SELECT p.*, o.titulo as titulo_oferta, o.ubicacion, o.tipo_contrato, o.salario
+        $query = "SELECT p.*, o.titulo as titulo_oferta, o.descripcion as descripcion_oferta, 
+                 o.ubicacion, o.salario, o.tipo_contrato, o.fecha_publicacion, o.fecha_cierre,
+                 u.nombre as nombre_reclutador, u.email as email_reclutador
                  FROM Postulacion p
                  JOIN OfertaLaboral o ON p.oferta_laboral_id = o.id
+                 JOIN Usuario u ON o.reclutador_id = u.id
                  WHERE p.candidato_id = :candidato_id
                  ORDER BY p.fecha_postulacion DESC";
 
@@ -81,20 +57,10 @@ class Postulacion
     }
 
     // Obtener postulaciones por oferta
-    public function getPorOferta($ofertaId)
+    public function getByOferta($ofertaId)
     {
-        // Primero verificamos si la oferta existe
-        $queryOferta = "SELECT * FROM OfertaLaboral WHERE id = :oferta_id";
-        $stmtOferta = $this->conn->prepare($queryOferta);
-        $stmtOferta->bindParam(':oferta_id', $ofertaId, PDO::PARAM_INT);
-        $stmtOferta->execute();
-
-        if ($stmtOferta->rowCount() == 0) {
-            throw new Exception('La oferta laboral con ID ' . $ofertaId . ' no existe');
-        }
-
-        // Consulta detallada con JOIN para obtener información de los candidatos
-        $query = "SELECT p.*, u.nombre, u.apellido, u.email, u.telefono
+        $query = "SELECT p.*, u.nombre as nombre_candidato, u.email as email_candidato, 
+                 u.telefono, u.curriculum_url, u.linkedIn_url
                  FROM Postulacion p
                  JOIN Usuario u ON p.candidato_id = u.id
                  WHERE p.oferta_laboral_id = :oferta_id
@@ -112,37 +78,19 @@ class Postulacion
         return $postulaciones;
     }
 
-    // Verificar si ya existe una postulación para un candidato y oferta
-    public function verificarExistente($candidatoId, $ofertaId)
-    {
-        $query = "SELECT * FROM Postulacion 
-                 WHERE candidato_id = :candidato_id 
-                 AND oferta_laboral_id = :oferta_id";
-
-        $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(':candidato_id', $candidatoId, PDO::PARAM_INT);
-        $stmt->bindParam(':oferta_id', $ofertaId, PDO::PARAM_INT);
-        $stmt->execute();
-
-        return $stmt->rowCount() > 0;
-    }
-
-    // Crear nueva postulación
+    // Crear una nueva postulación
     public function crear($data)
     {
         $query = "INSERT INTO Postulacion 
-                 (candidato_id, oferta_laboral_id, estado_postulacion, comentario) 
+                 (candidato_id, oferta_laboral_id, comentario, fecha_postulacion, estado) 
                  VALUES 
-                 (:candidato_id, :oferta_laboral_id, :estado_postulacion, :comentario)";
+                 (:candidato_id, :oferta_laboral_id, :comentario, CURRENT_TIMESTAMP, 'Pendiente')";
 
-        // Valor por defecto si no se proporciona
-        $estado = isset($data['estado_postulacion']) ? $data['estado_postulacion'] : 'Postulando';
-        $comentario = isset($data['comentario']) ? $data['comentario'] : null;
+        $comentario = isset($data['comentario']) ? $data['comentario'] : '';
 
         $stmt = $this->conn->prepare($query);
         $stmt->bindParam(':candidato_id', $data['candidato_id'], PDO::PARAM_INT);
         $stmt->bindParam(':oferta_laboral_id', $data['oferta_laboral_id'], PDO::PARAM_INT);
-        $stmt->bindParam(':estado_postulacion', $estado, PDO::PARAM_STR);
         $stmt->bindParam(':comentario', $comentario, PDO::PARAM_STR);
 
         if ($stmt->execute()) {
@@ -155,7 +103,7 @@ class Postulacion
     // Actualizar estado de postulación
     public function actualizarEstado($id, $estado)
     {
-        $query = "UPDATE Postulacion SET estado_postulacion = :estado WHERE id = :id";
+        $query = "UPDATE Postulacion SET estado = :estado WHERE id = :id";
 
         $stmt = $this->conn->prepare($query);
         $stmt->bindParam(':estado', $estado, PDO::PARAM_STR);

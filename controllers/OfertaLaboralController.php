@@ -13,7 +13,7 @@ class OfertaLaboralController
         $this->model = new OfertaLaboral();
     }
 
-    // Métodos existentes (verVigentes, porUbicacion, porTipoContrato, detalle)
+    // Métodos existentes
     public function verVigentes()
     {
         try {
@@ -85,7 +85,6 @@ class OfertaLaboralController
         }
     }
 
-    // Nuevos métodos a implementar
     public function crearOferta()
     {
         try {
@@ -93,7 +92,7 @@ class OfertaLaboralController
             $data = json_decode(file_get_contents("php://input"), true);
 
             // Validar datos mínimos requeridos
-            if (!isset($data['titulo']) || !isset($data['reclutador_id'])) {
+            if (empty($data['titulo']) || empty($data['descripcion']) || empty($data['reclutador_id'])) {
                 Response::json([
                     'success' => false,
                     'message' => 'Faltan datos requeridos para crear oferta'
@@ -101,14 +100,14 @@ class OfertaLaboralController
                 return;
             }
 
-            // Guardar la oferta en la base de datos
+            // Crear oferta en la base de datos
             $resultado = $this->model->crear($data);
 
             if ($resultado) {
                 Response::json([
                     'success' => true,
                     'message' => 'Oferta laboral creada exitosamente',
-                    'data' => ['id' => $resultado]
+                    'id' => $resultado
                 ], 201);
             } else {
                 Response::json([
@@ -138,7 +137,27 @@ class OfertaLaboralController
             }
 
             // Obtener datos del cuerpo de la solicitud
-            $data = json_decode(file_get_contents("php://input"), true);
+            $rawData = file_get_contents("php://input");
+            $data = json_decode($rawData, true);
+
+            // Validar que se recibió un JSON válido
+            if ($data === null && json_last_error() !== JSON_ERROR_NONE) {
+                Response::json([
+                    'success' => false,
+                    'message' => 'Error en formato JSON: ' . json_last_error_msg(),
+                    'raw_data' => $rawData
+                ], 400);
+                return;
+            }
+
+            // Validar que hay datos para actualizar
+            if (empty($data)) {
+                Response::json([
+                    'success' => false,
+                    'message' => 'No se proporcionaron datos para actualizar'
+                ], 400);
+                return;
+            }
 
             // Actualizar la oferta
             $resultado = $this->model->actualizar($id, $data);
@@ -175,7 +194,7 @@ class OfertaLaboralController
                 return;
             }
 
-            // Desactivar la oferta (cambiar estado a 'Baja')
+            // Cambiar el estado a "Baja" (desactivada)
             $resultado = $this->model->cambiarEstado($id, 'Baja');
 
             if ($resultado) {

@@ -1,4 +1,5 @@
 <?php
+// filepath: c:\xampp\htdocs\cliente-feliz-api\controllers\PostulacionController.php
 require_once __DIR__ . '/../models/Postulacion.php';
 require_once __DIR__ . '/../utils/Response.php';
 
@@ -13,7 +14,6 @@ class PostulacionController
         $this->model = new Postulacion();
     }
 
-    // Métodos existentes
     public function getPostulaciones()
     {
         try {
@@ -33,51 +33,49 @@ class PostulacionController
     public function porCandidato($candidatoId)
     {
         try {
-            $postulaciones = $this->model->getPorCandidato($candidatoId);
+            $postulaciones = $this->model->getByCandidato($candidatoId);
             Response::json([
                 'success' => true,
                 'data' => $postulaciones
             ]);
-        } catch (Exception $e) {
-            Response::json([
-                'success' => false,
-                'message' => $e->getMessage()
-            ], 404);
         } catch (PDOException $e) {
             Response::json([
                 'success' => false,
-                'message' => 'Error al obtener postulaciones: ' . $e->getMessage()
+                'message' => 'Error al obtener postulaciones por candidato: ' . $e->getMessage()
             ], 500);
         }
     }
 
-    // Nuevos métodos a implementar
+    public function porOferta($ofertaId)
+    {
+        try {
+            $postulaciones = $this->model->getByOferta($ofertaId);
+            Response::json([
+                'success' => true,
+                'data' => $postulaciones
+            ]);
+        } catch (PDOException $e) {
+            Response::json([
+                'success' => false,
+                'message' => 'Error al obtener postulaciones por oferta: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function crearPostulacion()
     {
         try {
-            // Obtener datos del cuerpo de la solicitud
             $data = json_decode(file_get_contents("php://input"), true);
 
-            // Validar datos mínimos requeridos
+            // Validar datos
             if (!isset($data['candidato_id']) || !isset($data['oferta_laboral_id'])) {
                 Response::json([
                     'success' => false,
-                    'message' => 'Faltan datos requeridos para crear postulación'
+                    'message' => 'Datos incompletos para crear postulación'
                 ], 400);
                 return;
             }
 
-            // Verificar si ya existe una postulación para este candidato y oferta
-            $existente = $this->model->verificarExistente($data['candidato_id'], $data['oferta_laboral_id']);
-            if ($existente) {
-                Response::json([
-                    'success' => false,
-                    'message' => 'Ya existe una postulación para esta oferta laboral'
-                ], 409);
-                return;
-            }
-
-            // Guardar la postulación en la base de datos
             $resultado = $this->model->crear($data);
 
             if ($resultado) {
@@ -100,59 +98,25 @@ class PostulacionController
         }
     }
 
-    public function porOferta($ofertaId)
+    public function cambiarEstado($id)
     {
         try {
-            $postulaciones = $this->model->getPorOferta($ofertaId);
-            Response::json([
-                'success' => true,
-                'data' => $postulaciones
-            ]);
-        } catch (Exception $e) {
-            Response::json([
-                'success' => false,
-                'message' => $e->getMessage()
-            ], 404);
-        } catch (PDOException $e) {
-            Response::json([
-                'success' => false,
-                'message' => 'Error al obtener postulaciones por oferta: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    public function cambiarEstado($postulacionId)
-    {
-        try {
-            // Obtener datos del cuerpo de la solicitud
             $data = json_decode(file_get_contents("php://input"), true);
 
-            // Validar que se recibió el nuevo estado
             if (!isset($data['estado'])) {
                 Response::json([
                     'success' => false,
-                    'message' => 'Falta el estado para actualizar la postulación'
+                    'message' => 'Se requiere el nuevo estado'
                 ], 400);
                 return;
             }
 
-            // Verificar si la postulación existe
-            $postulacion = $this->model->getById($postulacionId);
-            if (!$postulacion) {
-                Response::json([
-                    'success' => false,
-                    'message' => 'Postulación no encontrada'
-                ], 404);
-                return;
-            }
-
-            // Actualizar el estado
-            $resultado = $this->model->actualizarEstado($postulacionId, $data['estado']);
+            $resultado = $this->model->actualizarEstado($id, $data['estado']);
 
             if ($resultado) {
                 Response::json([
                     'success' => true,
-                    'message' => 'Estado de postulación actualizado exitosamente'
+                    'message' => 'Estado de postulación actualizado'
                 ]);
             } else {
                 Response::json([
@@ -168,50 +132,38 @@ class PostulacionController
         }
     }
 
-    public function agregarComentario($postulacionId)
+    public function agregarComentario($id)
     {
         try {
-            // Obtener datos del cuerpo de la solicitud
             $data = json_decode(file_get_contents("php://input"), true);
 
-            // Validar que se recibió el comentario
             if (!isset($data['comentario'])) {
                 Response::json([
                     'success' => false,
-                    'message' => 'Falta el comentario para actualizar la postulación'
+                    'message' => 'Se requiere el comentario'
                 ], 400);
                 return;
             }
 
-            // Verificar si la postulación existe
-            $postulacion = $this->model->getById($postulacionId);
-            if (!$postulacion) {
-                Response::json([
-                    'success' => false,
-                    'message' => 'Postulación no encontrada'
-                ], 404);
-                return;
-            }
-
-            // Actualizar el comentario
-            $resultado = $this->model->actualizarComentario($postulacionId, $data['comentario']);
+            $resultado = $this->model->actualizarComentario($id, $data['comentario']);
 
             if ($resultado) {
                 Response::json([
                     'success' => true,
-                    'message' => 'Comentario de postulación actualizado exitosamente'
+                    'message' => 'Comentario agregado a la postulación'
                 ]);
             } else {
                 Response::json([
                     'success' => false,
-                    'message' => 'Error al actualizar comentario de postulación'
+                    'message' => 'Error al agregar comentario a la postulación'
                 ], 500);
             }
         } catch (PDOException $e) {
             Response::json([
                 'success' => false,
-                'message' => 'Error al actualizar comentario de postulación: ' . $e->getMessage()
+                'message' => 'Error al agregar comentario a la postulación: ' . $e->getMessage()
             ], 500);
         }
     }
 }
+?>
